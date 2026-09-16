@@ -39,26 +39,46 @@ pipeline {
         stage('Merge DEV → PROD') {
             steps {
 
-                sh '''
-                    git config user.name "Jenkins"
-                    git config user.email "jenkins@yourcompany.com"
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-credentials',
+                        usernameVariable: 'GIT_USERNAME',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
 
-                    git fetch origin
+                    sh '''
+                        set -e
 
-                    git checkout -B prod origin/prod
+                        echo "Configuring Git..."
 
-                    git merge origin/dev --ff-only
+                        git config user.name "Jenkins"
+                        git config user.email "jenkins@yourcompany.com"
 
-                    git push origin prod:prod
-                '''
+                        echo "Fetching latest branches..."
+                        git fetch origin
+
+                        echo "Checking out PROD..."
+                        git checkout -B prod origin/prod
+
+                        echo "Merging DEV into PROD..."
+                        git merge origin/dev --ff-only
+
+                        echo "Pushing PROD to GitHub..."
+
+                        git push https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/gaurav-patil-07/demo-repo.git prod:prod
+
+                        echo "PROD push successful!"
+                    '''
+                }
             }
         }
 
         stage('Deploy Production') {
             steps {
                 echo "Deploying PROD..."
-                
-                // Add your actual deployment commands
+
+                // Add your actual deployment commands here
             }
         }
     }
