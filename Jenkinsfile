@@ -6,39 +6,61 @@ pipeline {
 
         stage('Checkout DEV') {
             steps {
-                echo "Checking out DEV branch..."
+                echo "Checking out dev branch"
                 checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                echo "Building application..."
+                echo "Building application"
+                echo "Build successful"
             }
         }
 
         stage('Test') {
             steps {
-                echo "Running tests..."
-                sh 'echo "Tests successful"'
+                sh '''
+                    echo "Running tests..."
+                    echo "Tests successful"
+                '''
             }
         }
 
-        stage('Production Approval') {
+        stage('Manager 1 Approval') {
             steps {
-
-                input(
-                    message: 'DEV build is ready. Deploy this code to PRODUCTION?',
-                    ok: 'DEPLOY TO PROD',
-                    submitter: 'gaurav'
+                emailext(
+                    to: 'manager1@augtrans.com',
+                    subject: "Approval needed: Build #${env.BUILD_NUMBER}",
+                    body: "A new build is ready for production.\n\nPlease review and approve: ${env.BUILD_URL}input/"
                 )
 
+                input(
+                    message: 'DEV build passed tests. Approve for production?',
+                    ok: 'APPROVE',
+                    submitter: 'manager1_username'
+                )
+            }
+        }
+
+        stage('Manager 2 Approval') {
+            steps {
+                emailext(
+                    to: 'manager2@augtrans.com',
+                    subject: "Approval needed: Build #${env.BUILD_NUMBER}",
+                    body: "Manager 1 has approved this build.\n\nPlease review and give final approval: ${env.BUILD_URL}input/"
+                )
+
+                input(
+                    message: 'Manager 1 approved. Give final approval for production?',
+                    ok: 'APPROVE',
+                    submitter: 'manager2_username'
+                )
             }
         }
 
         stage('Merge DEV → PROD') {
             steps {
-
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'github-credentials',
@@ -46,29 +68,14 @@ pipeline {
                         passwordVariable: 'GIT_TOKEN'
                     )
                 ]) {
-
                     sh '''
                         set -e
-
-                        echo "Configuring Git..."
-
                         git config user.name "Jenkins"
-                        git config user.email "jenkins@yourcompany.com"
-
-                        echo "Fetching latest branches..."
+                        git config user.email "jenkins@augtrans.com"
                         git fetch origin
-
-                        echo "Checking out PROD..."
                         git checkout -B prod origin/prod
-
-                        echo "Merging DEV into PROD..."
                         git merge origin/dev --ff-only
-
-                        echo "Pushing PROD to GitHub..."
-
                         git push https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/gaurav-patil-07/demo-repo.git prod:prod
-
-                        echo "PROD push successful!"
                     '''
                 }
             }
@@ -76,31 +83,32 @@ pipeline {
 
         stage('Deploy Production') {
             steps {
-                echo "Deploying PROD..."
-
-                // Add your actual deployment commands here
+                echo "Deploying to production"
+                // Put your actual deployment commands here
+                echo "Production deployment successful"
             }
         }
     }
 
     post {
-
         success {
-            echo "================================="
-            echo "PRODUCTION DEPLOYMENT SUCCESSFUL"
-            echo "================================="
+            emailext(
+                to: 'manager1@augtrans.com, manager2@augtrans.com',
+                subject: "Deployed: Build #${env.BUILD_NUMBER}",
+                body: "The build has been successfully deployed to production."
+            )
         }
 
         aborted {
-            echo "================================="
-            echo "PRODUCTION DEPLOYMENT REJECTED"
-            echo "================================="
+            emailext(
+                to: 'manager1@augtrans.com, manager2@augtrans.com',
+                subject: "Rejected: Build #${env.BUILD_NUMBER}",
+                body: "Deployment was rejected or aborted at the approval stage."
+            )
         }
 
         failure {
-            echo "================================="
-            echo "PRODUCTION DEPLOYMENT FAILED"
-            echo "================================="
+            echo "Pipeline failed"
         }
     }
 }
